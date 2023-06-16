@@ -7,7 +7,7 @@
 import argparse
 from pathlib import Path
 
-import pytorch_lightning as pl
+import lightning as L
 from omegaconf import OmegaConf
 
 from enhancing.utils.general import get_config_from_file, initialize_from_config, setup_callbacks
@@ -16,11 +16,11 @@ from enhancing.utils.general import get_config_from_file, initialize_from_config
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("-c", "--config", type=str, required=True)
-    parser.add_argument("-s", "--seed", type=int, default=0)
-    parser.add_argument("-nn", "--num_nodes", type=int, default=1)
-    parser.add_argument("-ng", "--num_gpus", type=int, default=1)
-    parser.add_argument("-u", "--update_every", type=int, default=1)
-    parser.add_argument("-e", "--epochs", type=int, default=100)
+    parser.add_argument("-s", "--seed", type=int, default=42)
+    parser.add_argument("-a", "--accelerator", type=str, default="gpu")
+    parser.add_argument("-nd", "--num_devices", type=int, default=1)
+    parser.add_argument("-u", "--gradient_steps", type=int, default=1)
+    parser.add_argument("-e", "--epochs", type=int, default=10)
     parser.add_argument("-lr", "--base_lr", type=float, default=4.5e-6)
     parser.add_argument("-a", "--use_amp", default=False, action="store_true")
     parser.add_argument("-b", "--batch_frequency", type=int, default=750)
@@ -28,15 +28,15 @@ def main():
     args = parser.parse_args()
 
     # Set random seed
-    pl.seed_everything(args.seed)
+    L.seed_everything(args.seed)
 
     # Load configuration
-    config = get_config_from_file(Path("configs") / (args.config + ".yaml"))
+    config = get_config_from_file(Path.cwd().joinpath("configs", args.config + ".yaml"))
     exp_config = OmegaConf.create(
         {
             "name": args.config,
             "epochs": args.epochs,
-            "update_every": args.update_every,
+            "update_every": args.gradient_steps,
             "base_lr": args.base_lr,
             "use_amp": args.use_amp,
             "batch_frequency": args.batch_frequency,
@@ -56,13 +56,11 @@ def main():
     data.prepare_data()
 
     # Build trainer
-    trainer = pl.Trainer(
+    trainer = L.Trainer(
         max_epochs=exp_config.epochs,
         precision=16 if exp_config.use_amp else 32,
         callbacks=callbacks,
-        gpus=args.num_gpus,
-        num_nodes=args.num_nodes,
-        strategy="ddp" if args.num_nodes > 1 or args.num_gpus > 1 else None,
+        strategy="ddp" if args.num_devices > 1 else None,
         accumulate_grad_batches=exp_config.update_every,
         logger=logger,
     )

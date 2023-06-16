@@ -12,8 +12,9 @@ from typing import Dict, List, Tuple
 
 import numpy as np
 import torch
+from lightning.pytorch import Callback
+from lightning.pytorch.callbacks import ModelCheckpoint
 from omegaconf import OmegaConf
-from pytorch_lightning.callbacks import Callback, ModelCheckpoint
 from pytorch_lightning.loggers import WandbLogger
 
 from .callback import ImageLogger, SetupCallback

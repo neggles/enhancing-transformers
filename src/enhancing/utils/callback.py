@@ -5,17 +5,18 @@
 
 import os
 from pathlib import Path
-from typing import Dict, Generic, Tuple
+from typing import Any, Dict, Tuple
 
+import lightning as L
 import numpy as np
-import pytorch_lightning as pl
 import torch
 import torchvision
 import wandb
+from lightning.pytorch import Callback
+from lightning.pytorch.loggers.wandb import WandbLogger
+from lightning.pytorch.utilities.rank_zero import rank_zero_only
 from omegaconf import OmegaConf
 from PIL import Image
-from pytorch_lightning.callbacks import Callback
-from pytorch_lightning.utilities.distributed import rank_zero_only
 
 
 class SetupCallback(Callback):
@@ -33,7 +34,7 @@ class SetupCallback(Callback):
         self.config = config
         self.exp_config = exp_config
 
-    def on_pretrain_routine_start(self, trainer: pl.trainer.Trainer, pl_module: pl.LightningModule) -> None:
+    def on_pretrain_routine_start(self, trainer: L.Trainer, pl_module: L.LightningModule) -> None:
         if trainer.global_rank == 0:
             # Create logdirs and save configs
             os.makedirs(self.logdir, exist_ok=True)
@@ -54,8 +55,7 @@ class ImageLogger(Callback):
         self.batch_freq = batch_frequency
         self.max_images = max_images
         self.logger_log_images = {
-            pl.loggers.WandbLogger: self._wandb,
-            pl.loggers.TestTubeLogger: self._testtube,
+            WandbLogger: self._wandb,
         }
         self.log_steps = [2**n for n in range(int(np.log2(self.batch_freq)) + 1)]
         if not increase_log_steps:
@@ -63,8 +63,7 @@ class ImageLogger(Callback):
         self.clamp = clamp
 
     @rank_zero_only
-    def _wandb(self, pl_module, images, batch_idx, split):
-        # raise ValueError("No way wandb")
+    def _wandb(self, pl_module: L.LightningModule, images, batch_idx, split):
         grids = dict()
         for k in images:
             grid = torchvision.utils.make_grid(images[k])
@@ -72,7 +71,7 @@ class ImageLogger(Callback):
         pl_module.logger.experiment.log(grids)
 
     @rank_zero_only
-    def _testtube(self, pl_module, images, batch_idx, split):
+    def _testtube(self, pl_module: L.LightningModule, images, batch_idx, split):
         for k in images:
             grid = torchvision.utils.make_grid(images[k])
             grid = (grid + 1.0) / 2.0  # -1,1 -> 0,1; c,h,w
@@ -99,7 +98,7 @@ class ImageLogger(Callback):
 
     def log_img(
         self,
-        pl_module: pl.LightningModule,
+        pl_module: L.LightningModule,
         batch: Tuple[torch.LongTensor, torch.FloatTensor],
         batch_idx: int,
         split: str = "train",
@@ -151,9 +150,9 @@ class ImageLogger(Callback):
 
     def on_train_batch_end(
         self,
-        trainer: pl.trainer.Trainer,
-        pl_module: pl.LightningModule,
-        outputs: Generic,
+        trainer: L.Trainer,
+        pl_module: L.LightningModule,
+        outputs: Any,
         batch: Tuple[torch.LongTensor, torch.FloatTensor],
         batch_idx: int,
     ) -> None:
@@ -161,9 +160,9 @@ class ImageLogger(Callback):
 
     def on_validation_batch_end(
         self,
-        trainer: pl.trainer.Trainer,
-        pl_module: pl.LightningModule,
-        outputs: Generic,
+        trainer: L.Trainer,
+        pl_module: L.LightningModule,
+        outputs: Any,
         batch: Tuple[torch.LongTensor, torch.FloatTensor],
         dataloader_idx: int,
         batch_idx: int,
